@@ -1386,10 +1386,19 @@ function addCarouselSlot(){
     photoUploading = true;
     const saveBtn = document.querySelector('.modal-footer .btn-primary');
     if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Uploading photos...'; }
+    // Show previews immediately using blob URLs, then replace with compressed versions
+    const placeholders = files.map(file => {
+      const blobUrl = URL.createObjectURL(file);
+      carouselImages.push({thumb: blobUrl, full: blobUrl});
+      return blobUrl;
+    });
+    renderCarouselSlots();
     let done = 0;
-    files.forEach(file => {
+    files.forEach((file, i) => {
+      const idx = carouselImages.length - files.length + i;
       compressImage(file, ({thumb, full}) => {
-        carouselImages.push({thumb, full});
+        URL.revokeObjectURL(placeholders[i]);
+        carouselImages[idx] = {thumb, full};
         done++;
         if(done === files.length){
           photoUploading = false;
