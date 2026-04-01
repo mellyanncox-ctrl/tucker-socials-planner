@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tucker — Content Planner</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Tucker">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAEuklEQVR4nO3dwY0jRRTHYXu0ScCZQBAZkAFzJwKQQIzERMAdMiADRCCcIQvg1KNZ73jc1dWuV/3X9wXgerJ+etu2tVPnU6Hvfv3hv8rzuZ/nx6dzxbnDDhUvIyK/6wEi5pp7xX2XFxUya+0d9q4vJmS22ivsXV5EyOylN+yH3gHEzJ56e+oKWszcQ09Xm9a7kBml9RGkeUOLmZFae2sKWsxUaOluddBiptLa/lYFLWZmsKbDm0GLmZnc6rH7e2iYybtB287M6L0urwYtZmZ2rc83gxYzR/BWp56hifJJ0LYzR3LZqw1NlI+Ctp05otfd2tBEeQnadubIln5taKIImijn06nucePnb376etRZ3//24+97vZa5b9tz7hYlQY98Yy/1vNHmbjc67OGPHJVvbs/55t5m9PlDg65+cxetc5i7z8g5fCgkysOo5+dZtsVi7Tzm3seoeWxoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKMOCrvp7wdesncfc+xg1jw1NlKFBz7I1Wucwd5+Rcwzf0NVv8tbzzb3N6PPPlde5HfXOD3PfVnbHivsJSeJDIVEETRRBE0XQRBE0UQRNFEETRdBE+VB5+Ld//zXsrF8+/2K31zrqL25HnbtFyS+FI0O+1BN25e2sPYEcde4thj9yVMbcc371VcNbzz/q3FsNDbo65kXrHNVRLFrnOOrcPXwoJMqwoGfZzou188yy5RZr5znq3L1saKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImijDgt7z7zPvYe081VcLX1o7z1Hn7mVDE2Vo0LNs6dY5Ztl2rXMcde4ewzd0ddRbz6+OY+v5R517q9LL692xcps7VtqUBg1786GQKIImiqCJImiiCJoogiaKoIkiaKJ8qDz8qL9cHfUXzq/+/fKf3V7shj8e/vxs1FmvlfxSWHnLaU/Ylbfh9oQ9MuRLo8Me/shRfWXv1vOrr3been5lzBXnDw26OuZF6xzVMS9a56iOeTFyDh8KiTIs6Fm282LtPLNs58XaeWbZzotR89jQRBE0UQRNFEETRdBEETRRBE0UQRNF0EQRNFEETRRBE0XQRBE0UQRNFEETRdBEETRRBE0UQRNF0EQRNFEETRRBE0XQRBE0UR6eH5/OIw6qvqL30tp5qq9yvrR2nqq/z3zNqHlsaKIMDXqWLd06xyxbunWOWbb0yDmGb+jqqLeeXx311vOrox59/vl0Op2qLrB3x8pt7lhp8/KBsCpq2Mvz49PZh0KiCJooL0GP+j4a7mHp14YmykdB29Ic0etubWiifBK0Lc2RXPZqQxPlzaBtaY7grU6vbmhRM7Nrfb77yCFqZvRel56hiXIzaFuamdzqcdWGFjUzWNPh6kcOUVNpbX9Nz9CipkJLd80fCkXNSK29dcXpf7lwL1sXZ9fXdrY199DTVff30KJmT7097RqjRxC22msx3mW7Cpu19v4X/q6PC8Lmmns9qg57/hU3Iz5v/Q8tXeqsO58uwgAAAABJRU5ErkJggg==">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ── RESET & BASE ── */
@@ -468,6 +472,9 @@ input,textarea,select{font-family:inherit;}
 
     <div class="sidebar-section">
       <div class="sidebar-label">History</div>
+      <button class="nav-item" id="nav-library" onclick="showPanel('library',this);renderLibrary()">
+        <span class="nav-icon">🖼</span> Photo Library
+      </button>
       <button class="nav-item" id="nav-archive" onclick="showPanel('archive',this);renderArchive()">
         <span class="nav-icon">🗂</span> Archive
       </button>
@@ -488,6 +495,8 @@ input,textarea,select{font-family:inherit;}
           <button class="btn btn-ai btn-sm" onclick="showPanel('generate',document.getElementById('nav-generate'))">✦ Generate Week</button>
         </div>
       </div>
+      <!-- Weekly checklist -->
+      <div id="weeklyChecklist" style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 4px;border-bottom:1px solid var(--fog);margin-bottom:12px;"></div>
       <div class="stats-row" id="statsRow"></div>
       <div class="cal-wrap"><div class="cal-grid" id="calGrid"></div></div>
     </div>
@@ -613,6 +622,17 @@ input,textarea,select{font-family:inherit;}
         </div>
         <div id="capOutput"></div>
       </div>
+    </div>
+
+    <!-- LIBRARY PANEL -->
+    <div class="panel" id="panel-library">
+      <div class="page-header">
+        <div class="page-title">Photo Library</div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" onclick="downloadWeek()">↓ Download This Week</button>
+        </div>
+      </div>
+      <div id="libraryWrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;padding:4px 0;"></div>
     </div>
 
     <!-- ARCHIVE PANEL -->
@@ -896,6 +916,78 @@ function switchView(view, btn){
 // ═══════════════════════════════════════
 // CALENDAR
 // ═══════════════════════════════════════
+// ── WEEKLY CHECKLIST ──
+const CHECKLIST_STEPS = [
+  'Generate week content',
+  'Upload photos',
+  'Create stories',
+  'Schedule stories in Meta',
+  'Upload content into Instagram ready to post',
+];
+
+function getChecklistState(){
+  try{ return JSON.parse(localStorage.getItem('tucker2_checklist')||'{}'); }catch(e){ return {}; }
+}
+
+function saveChecklistState(state){
+  localStorage.setItem('tucker2_checklist', JSON.stringify(state));
+}
+
+function toggleChecklistStep(i){
+  const state = getChecklistState();
+  state[i] = !state[i];
+  saveChecklistState(state);
+  renderChecklist();
+}
+
+function resetChecklist(){
+  localStorage.removeItem('tucker2_checklist');
+  renderChecklist();
+}
+
+function renderChecklist(){
+  const wrap = document.getElementById('weeklyChecklist');
+  if(!wrap) return;
+  const state = getChecklistState();
+  const done = CHECKLIST_STEPS.filter((_,i)=>state[i]).length;
+  const allDone = done === CHECKLIST_STEPS.length;
+
+  const PILL_COLORS = [
+    {bg:'var(--terra-l)', border:'var(--terra)', text:'var(--terra)', dot:'var(--terra)'},
+    {bg:'var(--sage-l)',  border:'var(--sage)',  text:'var(--sage)',  dot:'var(--sage)'},
+    {bg:'var(--lilac-l)', border:'var(--lilac)', text:'var(--lilac)', dot:'var(--lilac)'},
+    {bg:'var(--butter-l)',border:'var(--butter)',text:'#9a7c0a',      dot:'#c9a812'},
+    {bg:'var(--terra-l)', border:'var(--terra)', text:'var(--terra)', dot:'var(--terra)'},
+  ];
+
+  wrap.innerHTML = CHECKLIST_STEPS.map((step, i) => {
+    const ticked = !!state[i];
+    const c = PILL_COLORS[i];
+    return `<button onclick="toggleChecklistStep(${i})" style="
+      display:inline-flex;align-items:center;gap:6px;
+      padding:5px 10px;border-radius:20px;
+      border:1px solid ${ticked ? c.border : 'var(--fog)'};
+      background:${ticked ? c.bg : 'var(--white)'};
+      color:${ticked ? c.text : 'var(--stone)'};
+      font-size:11px;font-weight:500;cursor:pointer;
+      text-decoration:${ticked?'line-through':'none'};
+      transition:all .15s;
+    ">
+      <span style="width:14px;height:14px;border-radius:50%;
+        border:1.5px solid ${ticked ? c.dot : 'var(--stone)'};
+        background:${ticked ? c.dot : 'transparent'};
+        display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">
+        ${ticked?'<span style="color:#fff;font-size:9px;line-height:1;">✓</span>':''}
+      </span>
+      ${step}
+    </button>`;
+  }).join('') + `<button onclick="resetChecklist()" style="
+    display:inline-flex;align-items:center;gap:4px;
+    padding:5px 10px;border-radius:20px;border:1px solid var(--fog);
+    background:transparent;color:var(--stone);font-size:11px;cursor:pointer;margin-left:auto;
+  ">↺ Reset</button>`;
+}
+
 function renderCalendar(){
   const year  = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -1810,6 +1902,121 @@ function archiveCurrentWeek(){
   showPanel('archive',document.getElementById('nav-archive'));
 }
 
+// ── PHOTO LIBRARY ──
+function renderLibrary(){
+  const wrap = document.getElementById('libraryWrap');
+  const withPhotos = posts.filter(p => p.imgSrc && p.imgSrc.length > 50);
+  if(!withPhotos.length){
+    wrap.innerHTML = `<div class="empty"><div class="empty-icon">🖼</div><div class="empty-title">No photos yet</div><div class="empty-desc">Upload photos to your posts and they will appear here.</div></div>`;
+    return;
+  }
+  // Sort by date descending
+  const sorted = [...withPhotos].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  wrap.innerHTML = sorted.map(p => {
+    const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : [p.imgSrc];
+    const typeLabel = p.type==='story'?'Story':p.type==='post-carousel'?'Carousel':'Post';
+    const dateFmt = p.date ? new Date(p.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) : '';
+    const thumbs = imgs.map((src,i) =>
+      `<div style="position:relative;flex-shrink:0;">
+        <img src="${src}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;display:block;">
+        <button onclick="downloadImage('${src}','tucker-${p.date}-${i+1}.jpg')" title="Download" style="position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;">↓</button>
+      </div>`
+    ).join('');
+    const captionPreview = p.caption ? escHtml(p.caption.substring(0,120)) + (p.caption.length>120?'…':'') : '<span style="color:var(--stone);font-style:italic;">No caption yet</span>';
+    return `<div style="background:var(--white);border:1px solid var(--fog);border-radius:12px;overflow:hidden;">
+      <div style="display:flex;gap:8px;padding:10px;overflow-x:auto;">${thumbs}</div>
+      <div style="padding:12px 14px;border-top:1px solid var(--fog);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:10px;font-weight:600;letter-spacing:.5px;padding:2px 7px;border-radius:10px;background:var(--sage-l);color:var(--sage);">${typeLabel}</span>
+          <span style="font-size:11px;color:var(--stone);">${dateFmt}</span>
+          <span style="flex:1;"></span>
+          <button class="btn btn-ghost btn-xs" onclick="openEditPost('${p.id}')">Edit</button>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px;">${escHtml(p.subject||'Untitled')}</div>
+        <div style="font-size:12px;color:var(--ink2);line-height:1.6;margin-bottom:10px;">${captionPreview}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-xs" onclick="copyCaption('${p.id}')">Copy caption</button>
+          <button class="btn btn-secondary btn-xs" onclick="downloadPost('${p.id}')">↓ Photo + caption</button>
+          ${imgs.length>1?`<button class="btn btn-secondary btn-xs" onclick="downloadAllImages('${p.id}')">↓ All ${imgs.length} photos</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function downloadImage(src, filename){
+  const a = document.createElement('a');
+  a.href = src;
+  a.download = filename;
+  a.click();
+}
+
+function copyCaption(id){
+  const p = posts.find(x=>x.id===id);
+  if(!p||!p.caption){showToast('no caption to copy');return;}
+  navigator.clipboard.writeText(p.caption).then(()=>showToast('caption copied ✓'));
+}
+
+function downloadPost(id){
+  const p = posts.find(x=>x.id===id);
+  if(!p){return;}
+  // Download photo(s)
+  const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc?[p.imgSrc]:[]);
+  imgs.forEach((src,i)=>{
+    setTimeout(()=>downloadImage(src, `tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`), i*300);
+  });
+  // Download caption as .txt
+  if(p.caption){
+    setTimeout(()=>{
+      const blob = new Blob([p.caption], {type:'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `tucker-${p.date}-caption.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }, imgs.length*300);
+  }
+  showToast('downloading ✓');
+}
+
+function downloadAllImages(id){
+  const p = posts.find(x=>x.id===id);
+  if(!p)return;
+  const imgs = (p.imgSrcs && p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
+  imgs.forEach((src,i)=>setTimeout(()=>downloadImage(src,`tucker-${p.date}-${i+1}.jpg`),i*300));
+  showToast(`downloading ${imgs.length} photos ✓`);
+}
+
+function downloadWeek(){
+  const weekOf = document.getElementById('genWeekOf').value;
+  const weekStart = getWeekStart(weekOf);
+  const weekDates = weekStart ? getWeekDates(weekStart) : null;
+  const relevant = weekDates
+    ? posts.filter(p=>weekDates.includes(p.date) && p.imgSrc && p.imgSrc.length>50)
+    : posts.filter(p=>p.imgSrc && p.imgSrc.length>50);
+  if(!relevant.length){showToast('no photos found for this week');return;}
+  let delay = 0;
+  relevant.forEach(p=>{
+    const imgs = (p.imgSrcs&&p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
+    imgs.forEach((src,i)=>{
+      setTimeout(()=>downloadImage(src,`tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`),delay);
+      delay+=300;
+    });
+    if(p.caption){
+      setTimeout(()=>{
+        const blob=new Blob([p.subject+'\n\n'+p.caption],{type:'text/plain'});
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);
+        a.download=`tucker-${p.date}-caption.txt`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      },delay);
+      delay+=300;
+    }
+  });
+  showToast(`downloading ${relevant.length} posts ✓`);
+}
+
 function renderArchive(){
   const arc=getArchive();
   const wrap=document.getElementById('archiveWrap');
@@ -1970,6 +2177,7 @@ if(document.getElementById('genWeekOf').value){
   updateWeekLabel();
 }
 renderCalendar();
+renderChecklist();
 renderKanban();
 buildShootList();
 renderArchive();
