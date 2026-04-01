@@ -876,7 +876,70 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
+// ═══════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════
+const SUPABASE_URL  = 'https://edeaeapeifagfcjzzuov.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_0LGkGSioTdKnEHy9ugLWig_uBknV60q';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function sbSavePosts(){
+  if(!posts.length) return;
+  // Upsert all posts — strip large imgSrc from main record, photos handled separately
+  const rows = posts.map(p => ({
+    id: p.id,
+    data: {...p, imgSrc:'', imgFull:'', imgSrcs:[]},
+    updated_at: new Date().toISOString()
+  }));
+  const {error} = await sb.from('posts').upsert(rows, {onConflict:'id'});
+  if(error) console.error('sbSavePosts error:', error);
+}
+
+async function sbSavePhoto(postId, slot, thumb, url){
+  const {error} = await sb.from('photos').upsert({
+    id: postId+'_'+slot,
+    post_id: postId,
+    slot,
+    url:   url   || thumb,
+    thumb: thumb || url,
+  }, {onConflict:'id'});
+  if(error) console.error('sbSavePhoto error:', error);
+}
+
+async function sbLoadAll(){
+  const {data:postRows, error:pe} = await sb.from('posts').select('*');
+  if(pe){ console.error('sbLoadAll posts error:', pe); return false; }
+  const {data:photoRows, error:phe} = await sb.from('photos').select('*');
+  if(phe){ console.error('sbLoadAll photos error:', phe); return false; }
+
+  // Build photo map
+  const photoMap = {};
+  (photoRows||[]).forEach(ph => {
+    if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
+    photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
+  });
+
+  // Merge photos into posts
+  posts = (postRows||[]).map(row => {
+    const p = row.data;
+    const imgs = (photoMap[p.id]||[]).filter(Boolean);
+    return {
+      ...p,
+      imgSrc:  imgs[0] ? imgs[0].thumb : '',
+      imgFull: imgs[0] ? imgs[0].full  : '',
+      imgSrcs: imgs,
+    };
+  });
+
+  return true;
+}
+
+async function sbDeletePost(id){
+  await sb.from('posts').delete().eq('id', id);
+}
+
 // ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
@@ -1253,6 +1316,15 @@ function savePost(){
     posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgFull:fullSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true});
   }
 
+  // Save photos to Supabase in background
+  if(isCarousel){
+    carouselImgData.forEach((img, i) => {
+      sbSavePhoto(postId, i, img.thumb, img.full);
+    });
+  } else if(thumbSrc && thumbSrc.length > 10){
+    sbSavePhoto(postId, 0, thumbSrc, fullSrc);
+  }
+
   closeModal();
   autoSave();
   renderCalendar();
@@ -1264,7 +1336,7 @@ function savePost(){
 function deleteCurrentPost(){
   if(!editingId) return;
   if(!confirm('Delete this post?')) return;
-  localStorage.removeItem('tucker2_photo_'+editingId);
+  sbDeletePost(editingId);
   posts = posts.filter(p=>p.id!==editingId);
   closeModal();
   autoSave();
@@ -2154,20 +2226,20 @@ function autoSave(){
   const pill=document.getElementById('savePill');
   pill.textContent='saving…';pill.className='save-pill saving';
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{
-    // Save posts with thumb inline (small) — full is a Cloudinary URL (tiny string)
-    const postsLite=posts.map(p=>({...p}));
+  saveTimer=setTimeout(async ()=>{
     try{
-      localStorage.setItem('tucker2_data',JSON.stringify({
-        posts:postsLite,
-        weekOf:document.getElementById('genWeekOf').value,
-        savedAt:new Date().toISOString(),
+      // Save to Supabase
+      await sbSavePosts();
+      // Also save week/settings to localStorage (tiny — just text)
+      localStorage.setItem('tucker2_settings', JSON.stringify({
+        weekOf: document.getElementById('genWeekOf').value,
+        savedAt: new Date().toISOString(),
       }));
       pill.textContent='saved';pill.className='save-pill ok';
       setTimeout(()=>{pill.textContent='saved';pill.className='save-pill';},2000);
     }catch(e){
+      console.error('autoSave error:', e);
       pill.textContent='save failed';pill.className='save-pill saving';
-      showToast('storage full — export to free space');
     }
   },600);
 }
@@ -2225,16 +2297,15 @@ function showToast(msg){
 // ═══════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════
-loadSaved();
-// Update week label if a value was already saved
-if(document.getElementById('genWeekOf').value){
-  updateWeekLabel();
-}
-renderCalendar();
-renderChecklist();
-renderKanban();
-buildShootList();
-renderArchive();
+(async()=>{
+  await loadSaved();
+  if(document.getElementById('genWeekOf').value){ updateWeekLabel(); }
+  renderCalendar();
+  renderChecklist();
+  renderKanban();
+  buildShootList();
+  renderArchive();
+})();
 </script>
 </body>
 </html>
