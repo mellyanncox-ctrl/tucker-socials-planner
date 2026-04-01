@@ -1207,9 +1207,14 @@ function openEditPost(id){
 function closeModal(){
   document.getElementById('postModal').classList.remove('open');
   editingId = null;
+  photoUploading = false;
+  currentFullPhoto = '';
+  const saveBtn = document.querySelector('.modal-footer .btn-primary');
+  if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
 }
 
 function savePost(){
+  if(photoUploading){ showToast('photo still uploading — please wait'); return; }
   const dateVal    = document.getElementById('modalDate').value;
   const typeVal    = document.getElementById('modalType').value;
   const subject    = document.getElementById('modalSubject').value.trim();
@@ -1325,18 +1330,26 @@ async function compressImage(file, cb){
 }
 
 let currentFullPhoto = ''; // cloudinary URL or thumb fallback
+let photoUploading = false;
 
 function handlePhotoUpload(inp){
   const file = inp.files[0]; if(!file) return;
-  // Show placeholder while uploading
-  document.getElementById('photoPlaceholder').querySelector('.photo-upload-text').textContent = 'Uploading...';
+  photoUploading = true;
+  // Disable save button while uploading
+  const saveBtn = document.querySelector('.modal-footer .btn-primary');
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Uploading photo...'; }
+  // Show thumb immediately so user sees something
+  const previewUrl = URL.createObjectURL(file);
+  document.getElementById('photoPreview').src = previewUrl;
+  document.getElementById('photoPreview').style.display = 'block';
+  document.getElementById('photoPlaceholder').style.display = 'none';
+  document.getElementById('removePhotoBtn').style.display = 'inline-flex';
   compressImage(file, ({thumb, full}) => {
+    photoUploading = false;
     currentFullPhoto = full;
     document.getElementById('photoPreview').src = thumb;
-    document.getElementById('photoPreview').style.display = 'block';
-    document.getElementById('photoPlaceholder').style.display = 'none';
-    document.getElementById('removePhotoBtn').style.display = 'inline-flex';
-    document.getElementById('photoPlaceholder').querySelector('.photo-upload-text').textContent = 'Click to upload photo';
+    URL.revokeObjectURL(previewUrl);
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
   });
 }
 
@@ -1369,12 +1382,20 @@ function addCarouselSlot(){
   inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
   inp.onchange = () => {
     const files = Array.from(inp.files).slice(0, 10 - carouselImages.length);
+    if(!files.length) return;
+    photoUploading = true;
+    const saveBtn = document.querySelector('.modal-footer .btn-primary');
+    if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Uploading photos...'; }
     let done = 0;
     files.forEach(file => {
       compressImage(file, ({thumb, full}) => {
         carouselImages.push({thumb, full});
         done++;
-        if(done === files.length) renderCarouselSlots();
+        if(done === files.length){
+          photoUploading = false;
+          if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+          renderCarouselSlots();
+        }
       });
     });
   };
