@@ -1137,9 +1137,9 @@ function savePost(){
 
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
-    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc,hasPhoto:!!(imgSrc&&imgSrc.length>50)});}
+    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc,hasPhoto:!!(imgSrc&&imgSrc.length>50),_manual:true});}
   } else {
-    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:hasImg?imgSrc:'',hasPhoto:hasImg});
+    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:hasImg?imgSrc:'',hasPhoto:hasImg,_manual:true});
   }
 
   closeModal();
