@@ -1232,28 +1232,19 @@ function savePost(){
   const postId = editingId || uid();
   const isCarousel = typeVal === 'post-carousel';
 
-  // Save photos to localStorage — single version used for both display and download
-  if(isCarousel){
-    carouselImages.forEach((img, i) => {
-      const src = img.thumb || img;
-      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i, src); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
-    });
-    for(let i = carouselImages.length; i < 10; i++) localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
-  } else {
-    if(imgSrc && imgSrc.length > 50){
-      try{ localStorage.setItem('tucker2_photo_'+postId, imgSrc); }catch(e){ showToast('storage full — photo could not be saved'); }
-    } else if(!hasImg && !existingImg){
-      localStorage.removeItem('tucker2_photo_'+postId);
-    }
-  }
+  // Photos stored inline on post object — no separate localStorage keys needed
 
+  const carouselImgData = isCarousel ? carouselImages.map(img => ({
+    thumb: (img && typeof img==='object') ? (img.thumb||'') : img,
+    full:  (img && typeof img==='object') ? (img.full||img.thumb||'') : img
+  })) : [];
   const thumbSrc = isCarousel
-    ? (carouselImages[0] ? (carouselImages[0].thumb||carouselImages[0]) : '')
+    ? (carouselImgData[0] ? carouselImgData[0].thumb : '')
     : (hasImg ? imgSrc : existingImg);
   const fullSrc = isCarousel
-    ? (carouselImages[0] ? (carouselImages[0].full||carouselImages[0].thumb||carouselImages[0]) : '')
+    ? (carouselImgData[0] ? carouselImgData[0].full : '')
     : (currentFullPhoto || imgSrc || existingImg);
-  const hasPhoto = isCarousel ? carouselImages.length > 0 : !!(thumbSrc && thumbSrc.length > 10);
+  const hasPhoto = isCarousel ? carouselImgData.length > 0 : !!(thumbSrc && thumbSrc.length > 10);
 
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
