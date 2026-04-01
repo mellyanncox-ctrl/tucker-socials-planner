@@ -1247,8 +1247,13 @@ function savePost(){
     }
   }
 
-  const thumbSrc = isCarousel ? (carouselImages[0] ? (carouselImages[0].thumb||carouselImages[0]) : '') : (hasImg ? imgSrc : existingImg);
-  const hasPhoto = isCarousel ? carouselImages.length > 0 : !!(imgSrc && imgSrc.length > 50);
+  const thumbSrc = isCarousel
+    ? (carouselImages[0] ? (carouselImages[0].thumb||carouselImages[0]) : '')
+    : (hasImg ? imgSrc : existingImg);
+  const fullSrc = isCarousel
+    ? (carouselImages[0] ? (carouselImages[0].full||carouselImages[0].thumb||carouselImages[0]) : '')
+    : (currentFullPhoto || imgSrc || existingImg);
+  const hasPhoto = isCarousel ? carouselImages.length > 0 : !!(thumbSrc && thumbSrc.length > 10);
 
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
