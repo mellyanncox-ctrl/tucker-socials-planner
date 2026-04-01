@@ -1316,15 +1316,21 @@ async function uploadToCloudinary(file){
 }
 
 async function compressImage(file, cb){
-  // Upload original to Cloudinary for full quality downloads
-  // Generate local thumb for calendar display
   compressToThumb(file, async thumb => {
+    // Always call cb with thumb immediately so UI never gets stuck
+    // Try Cloudinary in parallel — if it works, great; if not, thumb is the fallback
+    let called = false;
+    const done = (full) => { if(!called){ called=true; cb({thumb, full}); } };
+    // Timeout fallback — if Cloudinary takes more than 15s, use thumb
+    const timeout = setTimeout(() => done(thumb), 15000);
     try{
       const fullUrl = await uploadToCloudinary(file);
-      cb({thumb, full: fullUrl});
+      clearTimeout(timeout);
+      done(fullUrl);
     }catch(e){
-      console.warn('Cloudinary upload failed, using local thumb only', e);
-      cb({thumb, full: thumb});
+      clearTimeout(timeout);
+      console.warn('Cloudinary upload failed, using local thumb', e);
+      done(thumb);
     }
   });
 }
