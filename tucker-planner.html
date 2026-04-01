@@ -921,8 +921,8 @@ async function sbLoadAll(){
     photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
   });
 
-  // Merge photos into posts
-  posts = (postRows||[]).map(row => {
+  // Merge photos into posts — assign to global
+  const loaded = (postRows||[]).map(row => {
     const p = row.data;
     const imgs = (photoMap[p.id]||[]).filter(Boolean);
     return {
@@ -932,6 +932,8 @@ async function sbLoadAll(){
       imgSrcs: imgs,
     };
   });
+  posts = loaded;
+  window.posts = loaded;
 
   return true;
 }
