@@ -749,17 +749,26 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
     <div class="modal-body">
 
       <!-- Photo -->
-      <div class="modal-section">
-        <div class="modal-section-title">Photo</div>
-        <div class="photo-upload" id="photoUploadZone" onclick="document.getElementById('photoInput').click()">
-          <input type="file" id="photoInput" accept="image/*" style="display:none;" onchange="handlePhotoUpload(this)">
-          <div class="photo-upload-ph" id="photoPlaceholder">
-            <div class="photo-upload-icon">📷</div>
-            <div class="photo-upload-text">Click to upload photo</div>
+      <div class="modal-section" id="photoSection">
+        <div class="modal-section-title" id="photoSectionTitle">Photo</div>
+        <!-- Single image upload (posts & stories) -->
+        <div id="singlePhotoWrap">
+          <div class="photo-upload" id="photoUploadZone" onclick="document.getElementById('photoInput').click()">
+            <input type="file" id="photoInput" accept="image/*" style="display:none;" onchange="handlePhotoUpload(this)">
+            <div class="photo-upload-ph" id="photoPlaceholder">
+              <div class="photo-upload-icon">📷</div>
+              <div class="photo-upload-text">Click to upload photo</div>
+            </div>
+            <img id="photoPreview" src="" style="display:none;width:100%;max-height:220px;object-fit:contain;border-radius:6px;">
           </div>
-          <img id="photoPreview" src="" style="display:none;width:100%;max-height:220px;object-fit:contain;border-radius:6px;">
+          <button class="btn btn-ghost btn-xs" id="removePhotoBtn" onclick="removePhoto()" style="display:none;margin-top:4px;">Remove photo</button>
         </div>
-        <button class="btn btn-ghost btn-xs" id="removePhotoBtn" onclick="removePhoto()" style="display:none;margin-top:4px;">Remove photo</button>
+        <!-- Multi image upload (carousels) -->
+        <div id="multiPhotoWrap" style="display:none;">
+          <div id="carouselSlots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addCarouselSlot()" style="margin-top:8px;width:100%;justify-content:center;" id="addSlotBtn">+ Add image</button>
+          <div style="font-size:11px;color:var(--stone);margin-top:6px;">Up to 10 images. First image shows as the calendar thumbnail.</div>
+        </div>
       </div>
 
       <!-- Date & Type -->
@@ -770,7 +779,7 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
         </div>
         <div class="field">
           <label class="label">Type</label>
-          <select class="select" id="modalType" onchange="const l={'post-single':'Post','post-carousel':'Carousel Post','story':'Story'};document.getElementById('modalTitle').textContent=(editingId?'Edit ':'New ')+l[this.value]">
+          <select class="select" id="modalType" onchange="const l={'post-single':'Post','post-carousel':'Carousel Post','story':'Story'};document.getElementById('modalTitle').textContent=(editingId?'Edit ':'New ')+l[this.value];switchPhotoUI(this.value);">
             <option value="post-single">Post — Single</option>
             <option value="post-carousel">Post — Carousel</option>
             <option value="story">Story</option>
@@ -1056,6 +1065,9 @@ function openNewPost(dateStr){
   document.getElementById('modalFloorNotes').value = '';
   document.getElementById('photoPreview').style.display = 'none';
   document.getElementById('photoPreview').src = '';
+  carouselImages = [];
+  renderCarouselSlots();
+  switchPhotoUI('post-single');
   document.getElementById('photoPlaceholder').style.display = 'flex';
   document.getElementById('removePhotoBtn').style.display = 'none';
   document.getElementById('modalAiOut').classList.remove('visible');
@@ -1078,6 +1090,9 @@ function openEditPost(id){
   document.getElementById('modalCaption').value = p.caption || '';
   document.getElementById('modalNotes').value = p.notes || '';
   document.getElementById('modalFloorNotes').value = p.floorNotes || '';
+  switchPhotoUI(p.type || 'post-single');
+  carouselImages = p.imgSrcs ? [...p.imgSrcs] : [];
+  renderCarouselSlots();
   if(p.imgSrc){
     document.getElementById('photoPreview').src = p.imgSrc;
     document.getElementById('photoPreview').style.display = 'block';
@@ -1122,24 +1137,32 @@ function savePost(){
   if(!subject && !caption){showToast('add a subject or caption first');return;}
 
   const postId = editingId || uid();
+  const isCarousel = typeVal === 'post-carousel';
 
-  // Write photo to its own localStorage key immediately (not deferred)
-  if(imgSrc && imgSrc.length > 50){
-    try{
-      localStorage.setItem('tucker2_photo_'+postId, imgSrc);
-    }catch(e){
-      showToast('storage full — photo could not be saved');
-      console.error('[SAVE] photo write failed',e);
+  // For carousels — save each image to its own key, use first as thumbnail
+  if(isCarousel){
+    carouselImages.forEach((src, i) => {
+      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i, src); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
+    });
+    // Clean up old slots beyond current count
+    for(let i = carouselImages.length; i < 10; i++) localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
+  } else {
+    // Single image
+    if(imgSrc && imgSrc.length > 50){
+      try{ localStorage.setItem('tucker2_photo_'+postId, imgSrc); }catch(e){ showToast('storage full — photo could not be saved'); }
+    } else if(!hasImg && !existingImg){
+      localStorage.removeItem('tucker2_photo_'+postId);
     }
-  } else if(!hasImg && !existingImg){
-    localStorage.removeItem('tucker2_photo_'+postId);
   }
+
+  const thumbSrc = isCarousel ? (carouselImages[0]||'') : (hasImg ? imgSrc : existingImg);
+  const hasPhoto = isCarousel ? carouselImages.length > 0 : !!(imgSrc && imgSrc.length > 50);
 
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
-    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc,hasPhoto:!!(imgSrc&&imgSrc.length>50),_manual:true});}
+    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgSrcs:isCarousel?[...carouselImages]:[],hasPhoto,_manual:true});}
   } else {
-    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:hasImg?imgSrc:'',hasPhoto:hasImg,_manual:true});
+    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgSrcs:isCarousel?[...carouselImages]:[],hasPhoto,_manual:true});
   }
 
   closeModal();
@@ -1166,26 +1189,76 @@ function deleteCurrentPost(){
 // ═══════════════════════════════════════
 // PHOTO
 // ═══════════════════════════════════════
-function handlePhotoUpload(inp){
-  const file = inp.files[0]; if(!file) return;
+function compressImage(file, cb){
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
-    // Compress to max 800px wide, 0.7 quality JPEG — keeps storage well under 100KB per photo
     const MAX = 800;
     const scale = Math.min(1, MAX / Math.max(img.width, img.height));
     const canvas = document.createElement('canvas');
     canvas.width  = Math.round(img.width  * scale);
     canvas.height = Math.round(img.height * scale);
     canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-    const compressed = canvas.toDataURL('image/jpeg', 0.7);
     URL.revokeObjectURL(url);
+    cb(canvas.toDataURL('image/jpeg', 0.7));
+  };
+  img.src = url;
+}
+
+function handlePhotoUpload(inp){
+  const file = inp.files[0]; if(!file) return;
+  compressImage(file, compressed => {
     document.getElementById('photoPreview').src = compressed;
     document.getElementById('photoPreview').style.display = 'block';
     document.getElementById('photoPlaceholder').style.display = 'none';
     document.getElementById('removePhotoBtn').style.display = 'inline-flex';
+  });
+}
+
+// ── Carousel multi-image ──
+let carouselImages = []; // array of base64 strings
+
+function switchPhotoUI(type){
+  const isCarousel = type === 'post-carousel';
+  document.getElementById('singlePhotoWrap').style.display  = isCarousel ? 'none' : 'block';
+  document.getElementById('multiPhotoWrap').style.display   = isCarousel ? 'block' : 'none';
+  document.getElementById('photoSectionTitle').textContent  = isCarousel ? 'Photos (carousel)' : 'Photo';
+}
+
+function renderCarouselSlots(){
+  const wrap = document.getElementById('carouselSlots');
+  wrap.innerHTML = '';
+  carouselImages.forEach((src, i) => {
+    const slot = document.createElement('div');
+    slot.style.cssText = 'position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--fog);';
+    slot.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;top:4px;left:6px;font-size:10px;font-weight:600;color:#fff;background:rgba(0,0,0,.45);padding:2px 5px;border-radius:3px;">${i+1}</div>
+      <button onclick="removeCarouselSlot(${i})" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;line-height:1;padding:0;">×</button>`;
+    wrap.appendChild(slot);
+  });
+  document.getElementById('addSlotBtn').style.display = carouselImages.length >= 10 ? 'none' : 'flex';
+}
+
+function addCarouselSlot(){
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+  inp.onchange = () => {
+    const files = Array.from(inp.files).slice(0, 10 - carouselImages.length);
+    let done = 0;
+    files.forEach(file => {
+      compressImage(file, compressed => {
+        carouselImages.push(compressed);
+        done++;
+        if(done === files.length) renderCarouselSlots();
+      });
+    });
   };
-  img.src = url;
+  inp.click();
+}
+
+function removeCarouselSlot(i){
+  carouselImages.splice(i, 1);
+  renderCarouselSlots();
 }
 function removePhoto(){
   document.getElementById('photoPreview').src='';
@@ -1847,11 +1920,19 @@ function loadSaved(){
     if(d.posts){
       // Rejoin photos from their separate localStorage keys
       posts=d.posts.map(p=>{
+        if(p.type==='post-carousel'){
+          const imgs=[];
+          for(let i=0;i<10;i++){
+            const s=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
+            if(s) imgs.push(s); else break;
+          }
+          return {...p,imgSrcs:imgs,imgSrc:imgs[0]||''};
+        }
         if(p.hasPhoto){
           const img=localStorage.getItem('tucker2_photo_'+p.id)||'';
-          return {...p,imgSrc:img};
+          return {...p,imgSrc:img,imgSrcs:[]};
         }
-        return {...p,imgSrc:''};
+        return {...p,imgSrc:'',imgSrcs:[]};
       });
     }
     if(d.weekOf){
