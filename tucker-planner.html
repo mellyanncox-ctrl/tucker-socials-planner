@@ -1231,28 +1231,18 @@ function savePost(){
   const postId = editingId || uid();
   const isCarousel = typeVal === 'post-carousel';
 
-  // For carousels — save full quality for downloads, thumb for display
+  // Save photos to localStorage — single version used for both display and download
   if(isCarousel){
     carouselImages.forEach((img, i) => {
-      const full  = img.full  || img.thumb || img;
-      const thumb = img.thumb || img;
-      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i,      thumb); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
-      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i+'_f', full);  }catch(e){}
+      const src = img.thumb || img;
+      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i, src); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
     });
-    for(let i = carouselImages.length; i < 10; i++){
-      localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
-      localStorage.removeItem('tucker2_photo_'+postId+'_'+i+'_f');
-    }
+    for(let i = carouselImages.length; i < 10; i++) localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
   } else {
     if(imgSrc && imgSrc.length > 50){
       try{ localStorage.setItem('tucker2_photo_'+postId, imgSrc); }catch(e){ showToast('storage full — photo could not be saved'); }
-      // Save full quality for downloads
-      if(currentFullPhoto && currentFullPhoto.length > 50){
-        try{ localStorage.setItem('tucker2_photo_'+postId+'_f', currentFullPhoto); }catch(e){}
-      }
     } else if(!hasImg && !existingImg){
       localStorage.removeItem('tucker2_photo_'+postId);
-      localStorage.removeItem('tucker2_photo_'+postId+'_f');
     }
   }
 
@@ -1261,9 +1251,9 @@ function savePost(){
 
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
-    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgSrcs:isCarousel?[...carouselImages]:[],hasPhoto,_manual:true});}
+    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgFull:fullSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true});}
   } else {
-    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgSrcs:isCarousel?[...carouselImages]:[],hasPhoto,_manual:true});
+    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgFull:fullSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true});
   }
 
   closeModal();
@@ -1290,37 +1280,63 @@ function deleteCurrentPost(){
 // ═══════════════════════════════════════
 // PHOTO
 // ═══════════════════════════════════════
-function compressImage(file, cb){
-  // cb receives { thumb, full }
-  // thumb: 800px 0.65 quality — for calendar display and localStorage
-  // full:  1200px 0.92 quality — for downloading, looks great on Instagram
+const CLOUDINARY_CLOUD = 'dmijstkjk';
+const CLOUDINARY_PRESET = 'tucker';
+
+function compressToThumb(file, cb){
+  // Compress to small thumbnail for calendar display only
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
-    const compress = (maxPx, quality) => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width  = Math.round(img.width  * scale);
-      c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', quality);
-    };
+    const MAX = 400;
+    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width  = Math.round(img.width  * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     URL.revokeObjectURL(url);
-    cb({ thumb: compress(800, 0.65), full: compress(1200, 0.92) });
+    cb(c.toDataURL('image/jpeg', 0.6));
   };
   img.src = url;
 }
 
-let currentFullPhoto = ''; // full quality version of single post photo
+async function uploadToCloudinary(file){
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {method:'POST', body:fd});
+  if(!res.ok) throw new Error('Cloudinary upload failed');
+  const data = await res.json();
+  return data.secure_url;
+}
+
+async function compressImage(file, cb){
+  // Upload original to Cloudinary for full quality downloads
+  // Generate local thumb for calendar display
+  compressToThumb(file, async thumb => {
+    try{
+      const fullUrl = await uploadToCloudinary(file);
+      cb({thumb, full: fullUrl});
+    }catch(e){
+      console.warn('Cloudinary upload failed, using local thumb only', e);
+      cb({thumb, full: thumb});
+    }
+  });
+}
+
+let currentFullPhoto = ''; // cloudinary URL or thumb fallback
 
 function handlePhotoUpload(inp){
   const file = inp.files[0]; if(!file) return;
+  // Show placeholder while uploading
+  document.getElementById('photoPlaceholder').querySelector('.photo-upload-text').textContent = 'Uploading...';
   compressImage(file, ({thumb, full}) => {
     currentFullPhoto = full;
     document.getElementById('photoPreview').src = thumb;
     document.getElementById('photoPreview').style.display = 'block';
     document.getElementById('photoPlaceholder').style.display = 'none';
     document.getElementById('removePhotoBtn').style.display = 'inline-flex';
+    document.getElementById('photoPlaceholder').querySelector('.photo-upload-text').textContent = 'Click to upload photo';
   });
 }
 
@@ -1930,7 +1946,7 @@ function renderLibrary(){
   // Sort by date descending
   const sorted = [...withPhotos].sort((a,b) => (b.date||'').localeCompare(a.date||''));
   wrap.innerHTML = sorted.map(p => {
-    const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc ? [{thumb:p.imgSrc, full:p.imgFull||p.imgSrc}] : []);
+    const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc ? [p.imgSrc] : []);
     const typeLabel = p.type==='story'?'Story':p.type==='post-carousel'?'Carousel':'Post';
     const dateFmt = p.date ? new Date(p.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) : '';
     const thumbs = imgs.map((src,i) =>
@@ -1980,7 +1996,7 @@ function downloadPost(id){
   // Download photo(s)
   const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc?[p.imgSrc]:[]);
   imgs.forEach((src,i)=>{
-    const dlSrc = (typeof src === 'object') ? (src.full||src.thumb) : (p.imgFull && i===0 ? p.imgFull : src);
+    const dlSrc = (typeof src === 'object') ? (src.thumb||src) : src;
     setTimeout(()=>downloadImage(dlSrc, `tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`), i*300);
   });
   // Download caption as .txt
@@ -2002,7 +2018,7 @@ function downloadAllImages(id){
   if(!p)return;
   const imgs = (p.imgSrcs && p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
   imgs.forEach((src,i)=>{
-    const dlSrc = (typeof src==='object')?(src.full||src.thumb):src;
+    const dlSrc = (typeof src==='object')?(src.thumb||src):src;
     setTimeout(()=>downloadImage(dlSrc,`tucker-${p.date}-${i+1}.jpg`),i*300);
   });
   showToast(`downloading ${imgs.length} photos ✓`);
@@ -2020,7 +2036,7 @@ function downloadWeek(){
   relevant.forEach(p=>{
     const imgs = (p.imgSrcs&&p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
     imgs.forEach((src,i)=>{
-      const dlSrc=(typeof src==='object')?(src.full||src.thumb):(p.imgFull&&i===0?p.imgFull:src);
+      const dlSrc=(typeof src==='object')?(src.thumb||src):src;
       setTimeout(()=>downloadImage(dlSrc,`tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`),delay);
       delay+=300;
     });
@@ -2124,8 +2140,8 @@ function autoSave(){
   pill.textContent='saving…';pill.className='save-pill saving';
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
-    // Strip imgSrc from main save — photos are saved immediately in savePost
-    const postsLite=posts.map(p=>({...p,imgSrc:'',hasPhoto:!!(p.imgSrc&&p.imgSrc.length>50)}));
+    // Save posts with thumb inline (small) — full is a Cloudinary URL (tiny string)
+    const postsLite=posts.map(p=>({...p}));
     try{
       localStorage.setItem('tucker2_data',JSON.stringify({
         posts:postsLite,
@@ -2152,19 +2168,17 @@ function loadSaved(){
         if(p.type==='post-carousel'){
           const imgs=[];
           for(let i=0;i<10;i++){
-            const thumb=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
-            if(!thumb) break;
-            const full=localStorage.getItem('tucker2_photo_'+p.id+'_'+i+'_f')||thumb;
-            imgs.push({thumb, full});
+            const src=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
+            if(!src) break;
+            imgs.push(src);
           }
-          return {...p,imgSrcs:imgs,imgSrc:imgs[0]?imgs[0].thumb:''};
+          return {...p,imgSrcs:imgs,imgSrc:imgs[0]||''};
         }
         if(p.hasPhoto){
-          const thumb=localStorage.getItem('tucker2_photo_'+p.id)||'';
-          const full=localStorage.getItem('tucker2_photo_'+p.id+'_f')||thumb;
-          return {...p,imgSrc:thumb,imgFull:full,imgSrcs:[]};
+          const src=localStorage.getItem('tucker2_photo_'+p.id)||'';
+          return {...p,imgSrc:src,imgSrcs:[]};
         }
-        return {...p,imgSrc:'',imgFull:'',imgSrcs:[]};
+        return {...p,imgSrc:'',imgSrcs:[]};
       });
     }
     if(d.weekOf){
