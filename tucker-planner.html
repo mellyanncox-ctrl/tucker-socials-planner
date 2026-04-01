@@ -1231,23 +1231,32 @@ function savePost(){
   const postId = editingId || uid();
   const isCarousel = typeVal === 'post-carousel';
 
-  // For carousels — save each image to its own key, use first as thumbnail
+  // For carousels — save full quality for downloads, thumb for display
   if(isCarousel){
-    carouselImages.forEach((src, i) => {
-      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i, src); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
+    carouselImages.forEach((img, i) => {
+      const full  = img.full  || img.thumb || img;
+      const thumb = img.thumb || img;
+      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i,      thumb); }catch(e){ showToast('storage full — image '+(i+1)+' could not be saved'); }
+      try{ localStorage.setItem('tucker2_photo_'+postId+'_'+i+'_f', full);  }catch(e){}
     });
-    // Clean up old slots beyond current count
-    for(let i = carouselImages.length; i < 10; i++) localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
+    for(let i = carouselImages.length; i < 10; i++){
+      localStorage.removeItem('tucker2_photo_'+postId+'_'+i);
+      localStorage.removeItem('tucker2_photo_'+postId+'_'+i+'_f');
+    }
   } else {
-    // Single image
     if(imgSrc && imgSrc.length > 50){
       try{ localStorage.setItem('tucker2_photo_'+postId, imgSrc); }catch(e){ showToast('storage full — photo could not be saved'); }
+      // Save full quality for downloads
+      if(currentFullPhoto && currentFullPhoto.length > 50){
+        try{ localStorage.setItem('tucker2_photo_'+postId+'_f', currentFullPhoto); }catch(e){}
+      }
     } else if(!hasImg && !existingImg){
       localStorage.removeItem('tucker2_photo_'+postId);
+      localStorage.removeItem('tucker2_photo_'+postId+'_f');
     }
   }
 
-  const thumbSrc = isCarousel ? (carouselImages[0]||'') : (hasImg ? imgSrc : existingImg);
+  const thumbSrc = isCarousel ? (carouselImages[0] ? (carouselImages[0].thumb||carouselImages[0]) : '') : (hasImg ? imgSrc : existingImg);
   const hasPhoto = isCarousel ? carouselImages.length > 0 : !!(imgSrc && imgSrc.length > 50);
 
   if(editingId){
@@ -1282,25 +1291,33 @@ function deleteCurrentPost(){
 // PHOTO
 // ═══════════════════════════════════════
 function compressImage(file, cb){
+  // cb receives { thumb, full }
+  // thumb: 800px 0.65 quality — for calendar display and localStorage
+  // full:  1200px 0.92 quality — for downloading, looks great on Instagram
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
-    const MAX = 800;
-    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-    const canvas = document.createElement('canvas');
-    canvas.width  = Math.round(img.width  * scale);
-    canvas.height = Math.round(img.height * scale);
-    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    const compress = (maxPx, quality) => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width  = Math.round(img.width  * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', quality);
+    };
     URL.revokeObjectURL(url);
-    cb(canvas.toDataURL('image/jpeg', 0.7));
+    cb({ thumb: compress(800, 0.65), full: compress(1200, 0.92) });
   };
   img.src = url;
 }
 
+let currentFullPhoto = ''; // full quality version of single post photo
+
 function handlePhotoUpload(inp){
   const file = inp.files[0]; if(!file) return;
-  compressImage(file, compressed => {
-    document.getElementById('photoPreview').src = compressed;
+  compressImage(file, ({thumb, full}) => {
+    currentFullPhoto = full;
+    document.getElementById('photoPreview').src = thumb;
     document.getElementById('photoPreview').style.display = 'block';
     document.getElementById('photoPlaceholder').style.display = 'none';
     document.getElementById('removePhotoBtn').style.display = 'inline-flex';
@@ -1308,7 +1325,7 @@ function handlePhotoUpload(inp){
 }
 
 // ── Carousel multi-image ──
-let carouselImages = []; // array of base64 strings
+let carouselImages = []; // array of {thumb, full} objects
 
 function switchPhotoUI(type){
   const isCarousel = type === 'post-carousel';
@@ -1338,8 +1355,8 @@ function addCarouselSlot(){
     const files = Array.from(inp.files).slice(0, 10 - carouselImages.length);
     let done = 0;
     files.forEach(file => {
-      compressImage(file, compressed => {
-        carouselImages.push(compressed);
+      compressImage(file, ({thumb, full}) => {
+        carouselImages.push({thumb, full});
         done++;
         if(done === files.length) renderCarouselSlots();
       });
@@ -1913,7 +1930,7 @@ function renderLibrary(){
   // Sort by date descending
   const sorted = [...withPhotos].sort((a,b) => (b.date||'').localeCompare(a.date||''));
   wrap.innerHTML = sorted.map(p => {
-    const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : [p.imgSrc];
+    const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc ? [{thumb:p.imgSrc, full:p.imgFull||p.imgSrc}] : []);
     const typeLabel = p.type==='story'?'Story':p.type==='post-carousel'?'Carousel':'Post';
     const dateFmt = p.date ? new Date(p.date+'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) : '';
     const thumbs = imgs.map((src,i) =>
@@ -1963,7 +1980,8 @@ function downloadPost(id){
   // Download photo(s)
   const imgs = (p.imgSrcs && p.imgSrcs.length > 0) ? p.imgSrcs : (p.imgSrc?[p.imgSrc]:[]);
   imgs.forEach((src,i)=>{
-    setTimeout(()=>downloadImage(src, `tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`), i*300);
+    const dlSrc = (typeof src === 'object') ? (src.full||src.thumb) : (p.imgFull && i===0 ? p.imgFull : src);
+    setTimeout(()=>downloadImage(dlSrc, `tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`), i*300);
   });
   // Download caption as .txt
   if(p.caption){
@@ -1983,7 +2001,10 @@ function downloadAllImages(id){
   const p = posts.find(x=>x.id===id);
   if(!p)return;
   const imgs = (p.imgSrcs && p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
-  imgs.forEach((src,i)=>setTimeout(()=>downloadImage(src,`tucker-${p.date}-${i+1}.jpg`),i*300));
+  imgs.forEach((src,i)=>{
+    const dlSrc = (typeof src==='object')?(src.full||src.thumb):src;
+    setTimeout(()=>downloadImage(dlSrc,`tucker-${p.date}-${i+1}.jpg`),i*300);
+  });
   showToast(`downloading ${imgs.length} photos ✓`);
 }
 
@@ -1999,7 +2020,8 @@ function downloadWeek(){
   relevant.forEach(p=>{
     const imgs = (p.imgSrcs&&p.imgSrcs.length>0)?p.imgSrcs:(p.imgSrc?[p.imgSrc]:[]);
     imgs.forEach((src,i)=>{
-      setTimeout(()=>downloadImage(src,`tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`),delay);
+      const dlSrc=(typeof src==='object')?(src.full||src.thumb):(p.imgFull&&i===0?p.imgFull:src);
+      setTimeout(()=>downloadImage(dlSrc,`tucker-${p.date}${imgs.length>1?'-'+(i+1):''}.jpg`),delay);
       delay+=300;
     });
     if(p.caption){
@@ -2130,16 +2152,19 @@ function loadSaved(){
         if(p.type==='post-carousel'){
           const imgs=[];
           for(let i=0;i<10;i++){
-            const s=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
-            if(s) imgs.push(s); else break;
+            const thumb=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
+            if(!thumb) break;
+            const full=localStorage.getItem('tucker2_photo_'+p.id+'_'+i+'_f')||thumb;
+            imgs.push({thumb, full});
           }
-          return {...p,imgSrcs:imgs,imgSrc:imgs[0]||''};
+          return {...p,imgSrcs:imgs,imgSrc:imgs[0]?imgs[0].thumb:''};
         }
         if(p.hasPhoto){
-          const img=localStorage.getItem('tucker2_photo_'+p.id)||'';
-          return {...p,imgSrc:img,imgSrcs:[]};
+          const thumb=localStorage.getItem('tucker2_photo_'+p.id)||'';
+          const full=localStorage.getItem('tucker2_photo_'+p.id+'_f')||thumb;
+          return {...p,imgSrc:thumb,imgFull:full,imgSrcs:[]};
         }
-        return {...p,imgSrc:'',imgSrcs:[]};
+        return {...p,imgSrc:'',imgFull:'',imgSrcs:[]};
       });
     }
     if(d.weekOf){
