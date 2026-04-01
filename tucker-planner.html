@@ -1207,14 +1207,10 @@ function openEditPost(id){
 function closeModal(){
   document.getElementById('postModal').classList.remove('open');
   editingId = null;
-  photoUploading = false;
   currentFullPhoto = '';
-  const saveBtn = document.querySelector('.modal-footer .btn-primary');
-  if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
 }
 
 function savePost(){
-  if(photoUploading){ showToast('photo still uploading — please wait'); return; }
   const dateVal    = document.getElementById('modalDate').value;
   const typeVal    = document.getElementById('modalType').value;
   const subject    = document.getElementById('modalSubject').value.trim();
@@ -1336,26 +1332,21 @@ async function compressImage(file, cb){
 }
 
 let currentFullPhoto = ''; // cloudinary URL or thumb fallback
-let photoUploading = false;
 
 function handlePhotoUpload(inp){
   const file = inp.files[0]; if(!file) return;
-  photoUploading = true;
-  // Disable save button while uploading
-  const saveBtn = document.querySelector('.modal-footer .btn-primary');
-  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Uploading photo...'; }
-  // Show thumb immediately so user sees something
+  // Show preview immediately via blob URL
   const previewUrl = URL.createObjectURL(file);
   document.getElementById('photoPreview').src = previewUrl;
   document.getElementById('photoPreview').style.display = 'block';
   document.getElementById('photoPlaceholder').style.display = 'none';
   document.getElementById('removePhotoBtn').style.display = 'inline-flex';
+  currentFullPhoto = previewUrl; // usable immediately
+  // Upload to Cloudinary in background — updates currentFullPhoto when done
   compressImage(file, ({thumb, full}) => {
-    photoUploading = false;
     currentFullPhoto = full;
     document.getElementById('photoPreview').src = thumb;
     URL.revokeObjectURL(previewUrl);
-    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
   });
 }
 
@@ -1390,28 +1381,19 @@ function addCarouselSlot(){
   inp.onchange = () => {
     const files = Array.from(inp.files).slice(0, 10 - carouselImages.length);
     if(!files.length) return;
-    photoUploading = true;
-    const saveBtn = document.querySelector('.modal-footer .btn-primary');
-    if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Uploading photos...'; }
-    // Show previews immediately using blob URLs, then replace with compressed versions
+    // Show previews immediately using blob URLs, then replace with compressed/Cloudinary versions
     const placeholders = files.map(file => {
       const blobUrl = URL.createObjectURL(file);
       carouselImages.push({thumb: blobUrl, full: blobUrl});
       return blobUrl;
     });
     renderCarouselSlots();
-    let done = 0;
     files.forEach((file, i) => {
       const idx = carouselImages.length - files.length + i;
       compressImage(file, ({thumb, full}) => {
         URL.revokeObjectURL(placeholders[i]);
         carouselImages[idx] = {thumb, full};
-        done++;
-        if(done === files.length){
-          photoUploading = false;
-          if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
-          renderCarouselSlots();
-        }
+        renderCarouselSlots();
       });
     });
   };
