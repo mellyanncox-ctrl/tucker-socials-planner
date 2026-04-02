@@ -2257,40 +2257,18 @@ function showToast(msg){
 async function loadSaved(){
   const pill = document.getElementById('savePill');
   pill.textContent = 'loading…'; pill.className = 'save-pill saving';
-  try{
-    const postRows  = await sbFetch('posts?select=*');
-    const photoRows = await sbFetch('photos?select=*');
-
-    const photoMap = {};
-    (photoRows||[]).forEach(ph => {
-      if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
-      photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
-    });
-
-    posts = (postRows||[]).map(row => {
-      const p = row.data || row;
-      const imgs = (photoMap[p.id]||[]).filter(Boolean);
-      return {
-        ...p,
-        imgSrc:  imgs[0] ? imgs[0].thumb : (p.imgSrc||''),
-        imgFull: imgs[0] ? imgs[0].full  : (p.imgFull||''),
-        imgSrcs: imgs,
-      };
-    });
-    window.posts = posts;
-
+  const ok = await sbLoadAll();
+  if(ok){
     const settings = JSON.parse(localStorage.getItem('tucker2_settings')||'{}');
     if(settings.weekOf){
       document.getElementById('genWeekOf').value = settings.weekOf;
       document.getElementById('sidebarWeek').textContent = settings.weekOf;
     }
-
     pill.textContent = 'saved'; pill.className = 'save-pill ok';
     setTimeout(()=>{ pill.textContent='saved'; pill.className='save-pill'; }, 2000);
-  }catch(e){
-    console.error('loadSaved error:', e);
+  } else {
     pill.textContent = 'load failed'; pill.className = 'save-pill saving';
-    showToast('load error: '+e.message);
+    showToast('load failed — check connection');
   }
 }
 
