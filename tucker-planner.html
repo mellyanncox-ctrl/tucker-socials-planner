@@ -877,82 +877,58 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ═══════════════════════════════════════
-// SUPABASE (direct fetch — no SDK needed)
+// SUPABASE
 // ═══════════════════════════════════════
-const SUPABASE_URL  = 'https://edeaeapeifagfcjzzuov.supabase.co';
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkZWFlYXBlaWZhZ2Zjanp6dW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjk0MTUsImV4cCI6MjA5MDY0NTQxNX0.FrpydDFfo4WywpVzKP4-YhPLLPk5ZPVWS-x8TonPtDg';
-
-const sbHeaders = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': 'Bearer ' + SUPABASE_KEY,
-  'Content-Type': 'application/json',
-  'Prefer': 'resolution=merge-duplicates,return=minimal'
-};
-
-async function sbFetch(path, method='GET', body=null){
-  const opts = {method, headers: sbHeaders};
-  if(body) opts.body = JSON.stringify(body);
-  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
-  if(!res.ok){ const t=await res.text(); throw new Error(t); }
-  if(res.status===204) return null;
-  return res.json();
-}
+const SUPABASE_URL = 'https://edeaeapeifagfcjzzuov.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkZWFlYXBlaWZhZ2Zjanp6dW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjk0MTUsImV4cCI6MjA5MDY0NTQxNX0.FrpydDFfo4WywpVzKP4-YhPLLPk5ZPVWS-x8TonPtDg';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function sbSavePosts(){
   if(!posts.length) return;
-  const rows = posts.map(p => ({
+  const rows = posts.map(p=>({
     id: p.id,
     data: {...p, imgSrc:'', imgFull:'', imgSrcs:[]},
     updated_at: new Date().toISOString()
   }));
-  await sbFetch('posts?on_conflict=id', 'POST', rows);
+  const {error} = await sb.from('tucker_posts').upsert(rows,{onConflict:'id'});
+  if(error) throw new Error(JSON.stringify(error));
 }
 
 async function sbSavePhoto(postId, slot, thumb, url){
-  await sbFetch('photos?on_conflict=id', 'POST', [{
+  const {error} = await sb.from('tucker_photos').upsert({
     id: postId+'_'+slot,
     post_id: postId,
     slot,
-    url:   url   || thumb,
-    thumb: thumb || url,
-  }]);
+    url: url||thumb,
+    thumb: thumb||url,
+  },{onConflict:'id'});
+  if(error) console.error('sbSavePhoto error:',error);
 }
 
 async function sbLoadAll(){
-  try{
-    const postRows  = await sbFetch('posts?select=*');
-    const photoRows = await sbFetch('photos?select=*');
-
-    const photoMap = {};
-    (photoRows||[]).forEach(ph => {
-      if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
-      photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
-    });
-
-    const loaded = (postRows||[]).map(row => {
-      // Support both flat rows and nested {data:...} format
-      const p = row.data || row;
-      const imgs = (photoMap[p.id]||[]).filter(Boolean);
-      return {
-        ...p,
-        imgSrc:  imgs[0] ? imgs[0].thumb : (p.imgSrc||''),
-        imgFull: imgs[0] ? imgs[0].full  : (p.imgFull||''),
-        imgSrcs: imgs,
-      };
-    });
-    posts = loaded;
-    window.posts = loaded;
-    return true;
-  }catch(e){
-    console.error('sbLoadAll error:', e);
-    return false;
-  }
+  const {data:postRows, error:pe} = await sb.from('tucker_posts').select('*');
+  if(pe){ console.error('sbLoadAll posts error:',pe); return false; }
+  const {data:photoRows, error:phe} = await sb.from('tucker_photos').select('*');
+  if(phe){ console.error('sbLoadAll photos error:',phe); return false; }
+  const photoMap={};
+  (photoRows||[]).forEach(ph=>{
+    if(!photoMap[ph.post_id]) photoMap[ph.post_id]=[];
+    photoMap[ph.post_id][ph.slot]={thumb:ph.thumb, full:ph.url};
+  });
+  posts=(postRows||[]).map(row=>{
+    const p=row.data||row;
+    const imgs=(photoMap[p.id]||[]).filter(Boolean);
+    return{...p, imgSrc:imgs[0]?(imgs[0].full||imgs[0].thumb):(p.imgSrc||''), imgFull:imgs[0]?(imgs[0].full||imgs[0].thumb):(p.imgFull||''), imgSrcs:imgs};
+  });
+  window.posts=posts;
+  return true;
 }
 
 async function sbDeletePost(id){
-  await sbFetch('posts?id=eq.'+id, 'DELETE');
+  await sb.from('tucker_posts').delete().eq('id',id);
 }
 
 // ═══════════════════════════════════════
