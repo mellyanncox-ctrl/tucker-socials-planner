@@ -903,8 +903,10 @@ async function sbFetch(path, method='GET', body=null){
 async function sbSavePosts(){
   if(!posts.length) return;
   const rows = posts.map(p => ({
-    id: p.id,
-    data: {...p, imgSrc:'', imgFull:'', imgSrcs:[]},
+    ...p,
+    imgSrc: '',
+    imgFull: '',
+    imgSrcs: [],
     updated_at: new Date().toISOString()
   }));
   await sbFetch('posts?on_conflict=id', 'POST', rows);
@@ -932,12 +934,13 @@ async function sbLoadAll(){
     });
 
     const loaded = (postRows||[]).map(row => {
-      const p = row.data;
+      // Support both flat rows and nested {data:...} format
+      const p = row.data || row;
       const imgs = (photoMap[p.id]||[]).filter(Boolean);
       return {
         ...p,
-        imgSrc:  imgs[0] ? imgs[0].thumb : '',
-        imgFull: imgs[0] ? imgs[0].full  : '',
+        imgSrc:  imgs[0] ? imgs[0].thumb : (p.imgSrc||''),
+        imgFull: imgs[0] ? imgs[0].full  : (p.imgFull||''),
         imgSrcs: imgs,
       };
     });
