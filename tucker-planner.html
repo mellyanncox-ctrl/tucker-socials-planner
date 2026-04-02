@@ -2261,41 +2261,7 @@ function autoSave(){
   },600);
 }
 
-function loadSaved(){
-  const raw=localStorage.getItem('tucker2_data');
-  if(!raw)return;
-  try{
-    const d=JSON.parse(raw);
-    if(d.posts){
-      // Rejoin photos from their separate localStorage keys
-      posts=d.posts.map(p=>{
-        if(p.type==='post-carousel'){
-          const imgs=[];
-          for(let i=0;i<10;i++){
-            const src=localStorage.getItem('tucker2_photo_'+p.id+'_'+i);
-            if(!src) break;
-            imgs.push(src);
-          }
-          return {...p,imgSrcs:imgs,imgSrc:imgs[0]||''};
-        }
-        if(p.hasPhoto){
-          const src=localStorage.getItem('tucker2_photo_'+p.id)||'';
-          return {...p,imgSrc:src,imgSrcs:[]};
-        }
-        return {...p,imgSrc:'',imgSrcs:[]};
-      });
-    }
-    if(d.weekOf){
-      document.getElementById('genWeekOf').value=d.weekOf;
-      document.getElementById('sidebarWeek').textContent=d.weekOf;
-    }
-    if(d.savedAt){
-      const mins=Math.round((Date.now()-new Date(d.savedAt))/60000);
-      const label=mins<2?'just now':mins<60?`${mins}m ago`:new Date(d.savedAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
-      document.getElementById('savePill').textContent=`saved ${label}`;
-    }
-  }catch(e){console.warn('load failed',e);}
-}
+// old loadSaved removed — Supabase version above
 
 // ═══════════════════════════════════════
 // UTILS
@@ -2309,6 +2275,49 @@ function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+// ═══════════════════════════════════════
+// LOAD
+// ═══════════════════════════════════════
+async function loadSaved(){
+  const pill = document.getElementById('savePill');
+  pill.textContent = 'loading…'; pill.className = 'save-pill saving';
+  try{
+    const postRows  = await sbFetch('posts?select=*');
+    const photoRows = await sbFetch('photos?select=*');
+
+    const photoMap = {};
+    (photoRows||[]).forEach(ph => {
+      if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
+      photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
+    });
+
+    posts = (postRows||[]).map(row => {
+      const p = row.data || row;
+      const imgs = (photoMap[p.id]||[]).filter(Boolean);
+      return {
+        ...p,
+        imgSrc:  imgs[0] ? imgs[0].thumb : (p.imgSrc||''),
+        imgFull: imgs[0] ? imgs[0].full  : (p.imgFull||''),
+        imgSrcs: imgs,
+      };
+    });
+    window.posts = posts;
+
+    const settings = JSON.parse(localStorage.getItem('tucker2_settings')||'{}');
+    if(settings.weekOf){
+      document.getElementById('genWeekOf').value = settings.weekOf;
+      document.getElementById('sidebarWeek').textContent = settings.weekOf;
+    }
+
+    pill.textContent = 'saved'; pill.className = 'save-pill ok';
+    setTimeout(()=>{ pill.textContent='saved'; pill.className='save-pill'; }, 2000);
+  }catch(e){
+    console.error('loadSaved error:', e);
+    pill.textContent = 'load failed'; pill.className = 'save-pill saving';
+    showToast('load error: '+e.message);
+  }
 }
 
 // ═══════════════════════════════════════
