@@ -882,7 +882,7 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
 // SUPABASE (direct fetch — no SDK needed)
 // ═══════════════════════════════════════
 const SUPABASE_URL  = 'https://edeaeapeifagfcjzzuov.supabase.co';
-const SUPABASE_KEY  = 'sb_publishable_0LGkGSioTdKnEHy9ugLWig_uBknV60q';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkZWFlYXBlaWZhZ2Zjanp6dW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNjk0MTUsImV4cCI6MjA5MDY0NTQxNX0.FrpydDFfo4WywpVzKP4-YhPLLPk5ZPVWS-x8TonPtDg';
 
 const sbHeaders = {
   'apikey': SUPABASE_KEY,
@@ -903,10 +903,8 @@ async function sbFetch(path, method='GET', body=null){
 async function sbSavePosts(){
   if(!posts.length) return;
   const rows = posts.map(p => ({
-    ...p,
-    imgSrc: '',
-    imgFull: '',
-    imgSrcs: [],
+    id: p.id,
+    data: {...p, imgSrc:'', imgFull:'', imgSrcs:[]},
     updated_at: new Date().toISOString()
   }));
   await sbFetch('posts?on_conflict=id', 'POST', rows);
