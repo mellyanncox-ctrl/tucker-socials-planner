@@ -1300,12 +1300,17 @@ function savePost(){
     : (currentFullPhoto || imgSrc || existingImg);
   const hasPhoto = isCarousel ? carouselImgData.length > 0 : !!(thumbSrc && thumbSrc.length > 10);
 
+  // Use fullSrc (Cloudinary URL) as imgSrc so downloads get full quality
+  const saveSrc = fullSrc || thumbSrc;
+  const postData = {date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:saveSrc,imgFull:saveSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true};
+
   if(editingId){
     const p = posts.find(x=>x.id===editingId);
-    if(p){Object.assign(p,{date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgFull:fullSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true});}
+    if(p){Object.assign(p,postData);}
   } else {
-    posts.push({id:postId,date:dateVal,type:typeVal,subject,caption,notes,floorNotes,pillar,status,imgSrc:thumbSrc,imgFull:fullSrc,imgSrcs:carouselImgData,hasPhoto,_manual:true});
+    posts.push({id:postId,...postData});
   }
+  window._lastSavedPostId = postId;
 
   // Save photos to Supabase in background
   if(isCarousel){
@@ -1393,19 +1398,32 @@ async function compressImage(file, cb){
 let currentFullPhoto = ''; // cloudinary URL or thumb fallback
 
 function handlePhotoUpload(inp){
-  const file = inp.files[0]; if(!file) return;
-  // Show preview immediately via blob URL
-  const previewUrl = URL.createObjectURL(file);
-  document.getElementById('photoPreview').src = previewUrl;
-  document.getElementById('photoPreview').style.display = 'block';
-  document.getElementById('photoPlaceholder').style.display = 'none';
-  document.getElementById('removePhotoBtn').style.display = 'inline-flex';
-  currentFullPhoto = previewUrl; // usable immediately
-  // Upload to Cloudinary in background — updates currentFullPhoto when done
-  compressImage(file, ({thumb, full}) => {
-    currentFullPhoto = full;
-    document.getElementById('photoPreview').src = thumb;
+  const file=inp.files[0];if(!file)return;
+  const previewUrl=URL.createObjectURL(file);
+  document.getElementById('photoPreview').src=previewUrl;
+  document.getElementById('photoPreview').style.display='block';
+  document.getElementById('photoPlaceholder').style.display='none';
+  document.getElementById('removePhotoBtn').style.display='inline-flex';
+  // Step 1: compress to thumb immediately — safe to save offline
+  compressToThumb(file, thumb=>{
+    currentFullPhoto=thumb;
+    document.getElementById('photoPreview').src=thumb;
     URL.revokeObjectURL(previewUrl);
+    const uploadTargetId=editingId;
+    // Step 2: upload to Cloudinary in background for full quality URL
+    uploadToCloudinary(file).then(fullUrl=>{
+      currentFullPhoto=fullUrl;
+      console.log('Cloudinary OK:', fullUrl.substring(0,60));
+      const targetId=uploadTargetId||window._lastSavedPostId||(posts.length?posts[posts.length-1].id:null);
+      if(targetId){
+        const p=posts.find(x=>x.id===targetId);
+        if(p){
+          p.imgSrc=fullUrl;p.imgFull=fullUrl;
+          sbSavePhoto(targetId,0,thumb,fullUrl);
+          autoSave();renderCalendar();
+        }
+      }
+    }).catch(e=>console.warn('Cloudinary failed, using base64:',e.message));
   });
 }
 
@@ -2055,11 +2073,26 @@ function renderLibrary(){
   }).join('');
 }
 
-function downloadImage(src, filename){
-  const a = document.createElement('a');
-  a.href = src;
-  a.download = filename;
-  a.click();
+async function downloadImage(src, filename){
+  if(!src||src.length<10){showToast('no photo to download');return;}
+  try{
+    let blobUrl;
+    if(src.startsWith('data:')){
+      const res=await fetch(src);const blob=await res.blob();blobUrl=URL.createObjectURL(blob);
+    } else {
+      const res=await fetch(src);if(!res.ok) throw new Error('fetch failed');
+      const blob=await res.blob();blobUrl=URL.createObjectURL(blob);
+    }
+    const a=document.createElement('a');a.href=blobUrl;
+    const ext=src.startsWith('data:image/png')?'.png':'.jpg';
+    a.download=filename.replace(/\.[^.]+$/,'')+ext;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(blobUrl),2000);
+    showToast('downloading ✓');
+  }catch(e){
+    window.open(src,'_blank');
+    showToast('opened in new tab — right-click to save');
+  }
 }
 
 function copyCaption(id){
