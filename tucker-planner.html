@@ -877,70 +877,81 @@ Order pickup: meandu.app/tucker/pickup · No menu substitutions.</textarea>
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 // ═══════════════════════════════════════
-// SUPABASE
+// SUPABASE (direct fetch — no SDK needed)
 // ═══════════════════════════════════════
 const SUPABASE_URL  = 'https://edeaeapeifagfcjzzuov.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_0LGkGSioTdKnEHy9ugLWig_uBknV60q';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const sbHeaders = {
+  'apikey': SUPABASE_KEY,
+  'Authorization': 'Bearer ' + SUPABASE_KEY,
+  'Content-Type': 'application/json',
+  'Prefer': 'resolution=merge-duplicates'
+};
+
+async function sbFetch(path, method='GET', body=null){
+  const opts = {method, headers: sbHeaders};
+  if(body) opts.body = JSON.stringify(body);
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, opts);
+  if(!res.ok){ const t=await res.text(); throw new Error(t); }
+  if(res.status===204) return null;
+  return res.json();
+}
 
 async function sbSavePosts(){
   if(!posts.length) return;
-  // Upsert all posts — strip large imgSrc from main record, photos handled separately
   const rows = posts.map(p => ({
     id: p.id,
     data: {...p, imgSrc:'', imgFull:'', imgSrcs:[]},
     updated_at: new Date().toISOString()
   }));
-  const {error} = await sb.from('posts').upsert(rows, {onConflict:'id'});
-  if(error) console.error('sbSavePosts error:', error);
+  await sbFetch('posts?on_conflict=id', 'POST', rows);
 }
 
 async function sbSavePhoto(postId, slot, thumb, url){
-  const {error} = await sb.from('photos').upsert({
+  await sbFetch('photos?on_conflict=id', 'POST', [{
     id: postId+'_'+slot,
     post_id: postId,
     slot,
     url:   url   || thumb,
     thumb: thumb || url,
-  }, {onConflict:'id'});
-  if(error) console.error('sbSavePhoto error:', error);
+  }]);
 }
 
 async function sbLoadAll(){
-  const {data:postRows, error:pe} = await sb.from('posts').select('*');
-  if(pe){ console.error('sbLoadAll posts error:', pe); return false; }
-  const {data:photoRows, error:phe} = await sb.from('photos').select('*');
-  if(phe){ console.error('sbLoadAll photos error:', phe); return false; }
+  try{
+    const postRows  = await sbFetch('posts?select=*');
+    const photoRows = await sbFetch('photos?select=*');
 
-  // Build photo map
-  const photoMap = {};
-  (photoRows||[]).forEach(ph => {
-    if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
-    photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
-  });
+    const photoMap = {};
+    (photoRows||[]).forEach(ph => {
+      if(!photoMap[ph.post_id]) photoMap[ph.post_id] = [];
+      photoMap[ph.post_id][ph.slot] = {thumb: ph.thumb, full: ph.url};
+    });
 
-  // Merge photos into posts — assign to global
-  const loaded = (postRows||[]).map(row => {
-    const p = row.data;
-    const imgs = (photoMap[p.id]||[]).filter(Boolean);
-    return {
-      ...p,
-      imgSrc:  imgs[0] ? imgs[0].thumb : '',
-      imgFull: imgs[0] ? imgs[0].full  : '',
-      imgSrcs: imgs,
-    };
-  });
-  posts = loaded;
-  window.posts = loaded;
-
-  return true;
+    const loaded = (postRows||[]).map(row => {
+      const p = row.data;
+      const imgs = (photoMap[p.id]||[]).filter(Boolean);
+      return {
+        ...p,
+        imgSrc:  imgs[0] ? imgs[0].thumb : '',
+        imgFull: imgs[0] ? imgs[0].full  : '',
+        imgSrcs: imgs,
+      };
+    });
+    posts = loaded;
+    window.posts = loaded;
+    return true;
+  }catch(e){
+    console.error('sbLoadAll error:', e);
+    return false;
+  }
 }
 
 async function sbDeletePost(id){
-  await sb.from('posts').delete().eq('id', id);
+  await sbFetch('posts?id=eq.'+id, 'DELETE');
 }
 
 // ═══════════════════════════════════════
